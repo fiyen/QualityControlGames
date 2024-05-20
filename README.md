@@ -1,6 +1,11 @@
 # 这是一个质量管理课程的质量检验游戏程序
 前端基于react开发，后端基于python的fastapi开发，后端主要用于记录学生游戏数据。
 
+<img src="./assets/page1.png" width='400' height='200' style="display: block; margin: 2 auto"/>
+<img src="./assets/product.png" width='400' height='200' style="display: block; margin: 2 auto"/>
+<img src="./assets/one-step.png" width='400' height='200' style="display: block; margin: 2 auto"/>
+<img src="./assets/two-step.png" width='400' height='200' style="display: block; margin: 2 auto"/>
+<img src="./assets/teacherpage.png" width='400' height='200' style="display: block; margin: 2 auto"/>
 ## 前端介绍
 
 前端运行方法：
