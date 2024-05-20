@@ -1,0 +1,104 @@
+
+body {
+    margin: 0;
+    font-size: 16px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+.background {
+    background: #ffffff;
+    display: flex;
+    min-height: 40vh;
+}
+
+.background > h1 {
+    font-size: 2rem;
+    text-align: center
+}
+
+.gallery {
+    margin: auto;
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    /* perspective: 40rem; */
+    flex-wrap: wrap; /* 允许元素自动换行 */
+}
+
+.information {
+    margin: auto;
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap; /* 允许元素自动换行 */
+}
+
+.prodcard {
+    perspective: 40rem; 
+    position: relative;
+    width: 7rem;
+    height: 7rem;
+    cursor: pointer;
+    transition: 0.5s ease-in-out;
+    transform-style: preserve-3d;
+    border-radius: 10px;
+}
+  
+/* .prodcard:hover {
+    transform: rotateY(0.5turn);
+} */
+
+.prodcard:active {
+    transform: rotateY(0.5turn);
+}
+  
+.prodcard__side {
+    position: absolute;
+    top: 0;
+    left: 0;
+    backface-visibility: hidden;
+    width: 100%;
+    height: 100%;
+    transition: 1s ease-in-out;
+}
+
+.prodcard__side--back {
+    transform: rotateY(0.5turn);
+    background-color: #ffffff; /* 设置背景颜色 */
+    color: #2C2C2C; /* 设置文字颜色 */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.2rem;
+    width: 7rem;
+    height: 7rem;;
+    border-radius: 10px;
+}
+
+.prodcard__side > img {
+    width: 7rem;
+    height: 7rem;;
+    object-fit: cover;
+    border-radius: 10px;
+}
+
+.prodcard__side--back > img {
+    width: 7rem;
+    height: 7rem;;
+    object-fit: cover;
+    opacity: 0.5;
+    border-radius: 10px;
+}
+
+.prodcard__text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.prodcard__text > h1 {
+    font-size: 3rem;
+}
