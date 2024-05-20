@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import json
 from fastapi.middleware.cors import CORSMiddleware
@@ -145,3 +146,19 @@ async def init_data():
         return {"message": "Data initialized successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/get_data_list")
+async def get_data_list():
+    try:
+        files = os.listdir("./assets")  # 列出assets文件夹中的所有文件名
+        data_list = [file for file in files if file.endswith(".json") and file != "results_base.json"]
+        return [{"value": data, "label": data} for data in data_list]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/download_file")
+async def download_file(fileName: str):
+    file_path = os.path.join("./assets", fileName)
+    if os.path.exists(file_path):
+        return FileResponse(file_path, media_type='application/octet-stream', filename=fileName)
+    raise HTTPException(status_code=404, detail="文件未找到")

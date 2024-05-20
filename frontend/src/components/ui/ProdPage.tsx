@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/form"
 import { toast, ToastContainer } from 'react-toastify';
 import { getDataTemplate, DataFrame } from './initData'
+import Dropdown, { Option } from './dropdown'
 import 'react-toastify/dist/ReactToastify.css';
 
 let data: DataFrame
@@ -91,11 +92,6 @@ interface Prod {
     quality: string;
   }
 
-interface Frame {
-    value: string;
-    label: string
-}
-
 interface IconBackground {
     [key: string]: string;
 }
@@ -124,19 +120,6 @@ const prodLabel: IconBackground = {
     "手机屏幕": "phone"
 }
 
-const Dropdown = ({ options, value, onChange, label="请选择批次"}) => {
-    return (
-        <select value={value ? value.value : ""} onChange={(e) => onChange(e.target.value)}>
-            <option value="">{label}</option>
-            {options.map(option => (
-                <option key={option.value} value={option.value}>
-                    {option.label}
-                </option>
-            ))}
-        </select>
-    );
-};
-
 function ProdPage() {
     const { markVisited } = useContext(AuthContext);
 
@@ -147,10 +130,10 @@ function ProdPage() {
     const [number, setNumber] = useState(0);
     const [showProd, setShowProd] = useState(false);
     const [prods, setProds] = useState<Prod[]>([]);
-    const [batchs, setBatchs] = useState<Frame[]>(Array.from({ length: 20 }, (_, index) => ({
+    const [batchs, setBatchs] = useState<Option[]>(Array.from({ length: 20 }, (_, index) => ({
                                                             value: `${index + 1}`,
                                                             label: `batch ${index + 1}`})));
-    const [selectedBatch, setSelectedBatch] = useState<Frame | null>(null)
+    const [selectedBatch, setSelectedBatch] = useState<Option | null>(null)
     const [switchTwoStep, setSwitched] = useState(false)
     const location = useLocation();
     const { groupName, title } = location.state || {};

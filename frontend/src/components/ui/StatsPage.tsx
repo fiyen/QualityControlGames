@@ -3,21 +3,20 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
 import { toast, ToastContainer } from 'react-toastify';
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+import { Download, Upload } from 'lucide-react';
+import Dropdown, { Option } from './dropdown'
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs"
-
 import {
   Table,
   TableBody,
@@ -28,13 +27,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-
 import AuthContext from './AuthContext';
 import React, { useEffect, useContext, useRef, useState } from 'react';
 import { DataFrame } from '@/components/ui/initData'
+// 导入 Recharts 库所需组件
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-// 创建data用于全局保存当前的统计情况
-let data: DataFrame
+// 创建 data 用于全局保存当前的统计情况
+let data: DataFrame;
 
 interface DataIn {
   're': number;
@@ -46,7 +46,7 @@ interface DataIn {
   'ac2': number;
   'nxpassed2': number;
   'result2': string;
-  'nsample2': number
+  'nsample2': number;
 }
 
 const range = (start: number, end: number) => {
@@ -54,50 +54,83 @@ const range = (start: number, end: number) => {
 };
 
 function StatsPage() {
-  // 创建一个从1到20的数字数组
   const batches = range(1, 20);
   const gameTitles = ['luosiding', 'toycar', 'phone']
   const { markVisited } = useContext(AuthContext);
 
-  const [groupNames, setGroupNames] = useState<string[]>([]); // 这现在是个状态
+  const [groupNames, setGroupNames] = useState<string[]>([]);
   const [isAutoRefresh, setIsAutoRefresh] = useState(false);
+  const [countData, setCountData] = useState<{ [key: string]: { onestep: any[], twostep: any[] } }>({}); // 使用对象结构化数据
+  const [fileList, setFileList] = useState<Option[]>([]);
+  const [selectedFileName, setSelectedFileName] = useState<Option | null>(null);
+
   let intervalId = useRef(null);
 
-  async function loadData(): Promise<void> {
+  async function loadFileList() {
     try {
-        const url = `${import.meta.env.VITE_SERVER_URL}/load_data`
-        // 发起 fetch 请求
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error('Network response was not ok: ' + response.statusText);
-    }
-
-        // 解析 JSON 数据
-        data = await response.json();
-        console.log('data', data)
-        let loadedGroupNames = Object.keys(data.groups);
-        loadedGroupNames = loadedGroupNames.filter((value) => value !== "//##placeholder##//")
-
-        console.log("loadedGroupNames", loadedGroupNames)
-
-        setGroupNames(loadedGroupNames)
-        console.log('groupNames:', groupNames)
-    
+      const response = await fetch(`${import.meta.env.VITE_SERVER_URL}/get_data_list`);
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+  
+      const fileListData = await response.json();
+      setFileList(fileListData);
     } catch (error) {
-        // 错误处理
-        console.error('There was a problem with your fetch operation:', error);
+      console.error('Error while loading file list:', error);
+    }
+  }
+  
+
+  async function getCountData(): Promise<void> {
+    try {
+      const url = `${import.meta.env.VITE_SERVER_URL}/load_data`
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error('Network response was not ok: ' + response.statusText);
+      }
+
+      data = await response.json();
+      let loadedGroupNames = Object.keys(data.groups);
+      loadedGroupNames = loadedGroupNames.filter((value) => value !== "//##placeholder##//");
+
+      setGroupNames(loadedGroupNames);
+
+      const newCountData = {};
+
+      loadedGroupNames.forEach((groupName) => {
+        const onestepData = [];
+        const twostepData = [];
+        gameTitles.forEach((gameTitle) => {
+          batches.forEach((batch, idx) => {
+            const index = `${gameTitle.charAt(0).toUpperCase()}${idx + 1}`;
+            const newdata = getData(groupName, gameTitle, batch, 'onestep') as DataIn;
+            onestepData.push({ index, nsample: newdata.nsample });
+      
+            const newdata2 = getData(groupName, gameTitle, batch, 'twostep') as DataIn;
+            twostepData.push({ index, nsample: newdata2.nsample, nsample2: newdata2.nsample2 });
+          });
+        });
+        newCountData[groupName] = { onestep: onestepData, twostep: twostepData };
+      });
+      
+
+      setCountData(newCountData);
+    } catch (error) {
+      console.error('There was a problem with your fetch operation:', error);
     }
   }
 
-  function getData(groupName: string, gameTitle: string, batch: number, cway: string): number | string {
-    // 对数据进行处理的逻辑
-    console.log("Data processing begins:");
+  function downloadFile() {
+    if (selectedFileName) {
+      window.open(`${import.meta.env.VITE_SERVER_URL}/download_file?fileName=${selectedFileName}`, '_blank');
+    } else {
+      toast.info("请先选择需要下载的文件！");
+    }
+  }
 
-    // 更新检验参数
-    const fields = ['ac', 're', 'nsample','nxpassed', 'result'];
+  function getData(groupName: string, gameTitle: string, batch: number, cway: string): number | string | DataIn {
+    const fields = ['ac', 're', 'nsample', 'nxpassed', 'result'];
     const fields2 = ['ac2', 're2', 'nsample2', 'nxpassed2', 'result2']
-
-    // 创建新值
     const newdata: DataIn = {
       re: -1,
       ac: -1,
@@ -110,109 +143,116 @@ function StatsPage() {
       result2: '',
       nsample2: -1
     };
-    
 
     if (cway === "twostep") {
-        // 启动二次检验
-        const { onestep, twostep } = data.groups[groupName][gameTitle].sampledata[batch].twostep;
-        fields.forEach(field => {
-            newdata[field] = onestep[field];
-        });
-        fields2.forEach(field => {
-          newdata[field] = twostep[field];
-        });
-
+      const { onestep, twostep } = data.groups[groupName][gameTitle].sampledata[batch].twostep;
+      fields.forEach(field => {
+        newdata[field] = onestep[field];
+      });
+      fields2.forEach(field => {
+        newdata[field] = twostep[field];
+      });
     } else {
-        // 启动一次检验
-        const onestep = data.groups[groupName][gameTitle].sampledata[batch].onestep
-        fields.forEach(field => {
-          newdata[field] = onestep[field];
-        })
-
+      const onestep = data.groups[groupName][gameTitle].sampledata[batch].onestep
+      fields.forEach(field => {
+        newdata[field] = onestep[field];
+      });
     }
-    return newdata
+    return newdata;
   }
 
   function initData() {
     const url = `${import.meta.env.VITE_SERVER_URL}/init_data`
-
     fetch(url, {
-        method: 'GET' // 或 'POST' 或其他请求方法
-        // 可以添加其他的请求配置，比如 headers 等
+      method: 'GET'
     })
     .then(response => {
-        if (!response.ok) {
-            throw new Error('Network response was not ok');
-            toast.info(
-              `恭喜，"${groupName}"的第"${selectedBatch.value}"批的检验结果已成功保存。`,
-             )
-        }
-        // 这里不需要处理返回结果，可以直接结束
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+      // 这里你可以访问 `response.json()` 或其他方式处理返回的数据
+      // 如：return response.json();
+    })
+    .then(data => {
+      // 处理成功响应的数据
+      // 比如：console.log(data);
+      loadFileList();
+      // 显示成功信息
+      toast.info(`已成功重置数据。`);
     })
     .catch(error => {
-        console.error('Error in initiating data:', error);
+      console.error('Error in initiating data:', error);
     });
-}
-
-  function genMsg(groupName: string, gameTitle: string, batch: number, cway: string): string | Element {
-      // 先进行一波判断（后续优化）todo:
-      if (cway === 'onestep') {
-        if (gameTitle === "toycar") {
-          return "."
-        }
-      } else {
-        if (gameTitle === 'luosiding') {
-          return "."
-        }
-      }
-      // 生成可供显示的字符串
-      const newdata = getData(groupName, gameTitle, batch, cway);
-
-      const result = newdata['result'];
-      const result2 = newdata['result2'];
-
-      if (result2 !== '') {
-          if (result === '合格' && result2 === '合格') {
-              return (<div>&#10004;&#10004;</div>);
-          } else if (result === '不合格' && result2 === '不合格') {
-              return (<div>&#10008;&#10008;</div>);
-          } else if (result === '不合格' && result2 === '合格') {
-              return (<div>&#10008;&#10004;</div>);
-          } else {
-              return "?"
-          }
-      } else {
-          if (result === '合格') {
-              return (<div>&#10004;</div>);
-          } else if (result === '不合格') {
-              return (<div>&#10008;</div>);
-          }
-      }
-
-      return "-";
   }
 
+  function genMsg(groupName: string, gameTitle: string, batch: number, cway: string): string | JSX.Element {
+    if (cway === 'onestep') {
+      if (gameTitle === "toycar") {
+        return " ";
+      }
+    } else {
+      if (gameTitle === 'luosiding') {
+        return " ";
+      }
+    }
+
+    const newdata = getData(groupName, gameTitle, batch, cway) as DataIn;
+    const result = newdata['result'];
+    const result2 = newdata['result2'];
+
+    if (result2 !== '') {
+      if (result === '合格') {
+        return (<div>&#10004;</div>);
+      } else if (result === '不合格') {
+        return (<div>&#10008;</div>);
+      } else if (result === '二次检验' && result2 === '合格') {
+        return (<div>&#60;&#10004;</div>);
+      } else if (result === '二次检验' && result2 === '不合格') {
+        return (<div>&#187;&#10008;</div>);
+      } else {
+        return "???"
+      }
+    } else {
+      if (result === '合格') {
+        return (<div>&#10004;</div>);
+      } else if (result === '不合格') {
+        return (<div>&#10008;</div>);
+      }
+    }
+    return (<div>&#45;</div>);
+  }
+
+  const handleChange = (newValue:string) => {
+    const newIndex = fileList.find(value => value.value === newValue);
+    if (newIndex) {
+      if (newValue !== selectedFileName) {
+        setSelectedFileName(newValue)
+      }
+    } else {
+      setSelectedFileName(null)
+    }
+  };
 
   useEffect(() => {
     markVisited("StatsPage");
     return () => {
-      // 清理函数，组件卸载时调用
       if (intervalId.current) clearInterval(intervalId.current);
     }
   }, [markVisited]);
 
   useEffect(() => {
+    loadFileList();
+  }, []);
+
+  useEffect(() => {
     if (isAutoRefresh) {
-      // 如果开启自动刷新，设置定时器每10秒调用一次loadData
       intervalId.current = setInterval(() => {
-        loadData();
+        getCountData();
       }, 5000);
     } else {
-      // 如果关闭自动刷新，清除定时器
       if (intervalId.current) clearInterval(intervalId.current);
     }
 
-    // 当isAutoRefresh变化时重新执行此effect
     return () => {
       if (intervalId.current) clearInterval(intervalId.current);
     };
@@ -223,85 +263,124 @@ function StatsPage() {
   };
 
   return (
-    <div style={{minHeight: "300vh"}}>
-    <Tabs defaultValue="statistics" className="w-[1400px] h-[1000px]">
-      <TabsList className="grid w-full grid-cols-2">
-        <TabsTrigger value="statistics">STATISTICS</TabsTrigger>
-        <TabsTrigger value="save/load">SAVE/LOAD</TabsTrigger>
-      </TabsList>
-      <TabsContent value="statistics">
-        <Card>
-          <CardHeader>
-            <CardTitle>统计结果</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-          <Table>
-            <TableCaption>
-              <div className="flex items-center space-x-2 w-[300px]">
-                <Switch id="two-step-qc" onCheckedChange={toggleAutoRefresh}/>
-                <Label htmlFor="two-step-qc">自动刷新数据视图</Label>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <Button id="two-step-bt" onClick={initData} style={{ marginLeft: 'auto' }}>点击重置数据</Button>
-                <ToastContainer/>
-              </div>
-            </TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[10px]">组名</TableHead>
-                <TableHead className="w-[5px]">产品</TableHead>
-                {batches.map((i) => (
-                  <TableHead key={`batch-${i}`}>{i}</TableHead>
-                ))}
-                {batches.map((i) => (
-                  <TableHead key={`batch2-${i}`}>2-{i}</TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {groupNames.length > 0 && groupNames.map((group) => (
-                gameTitles.map((title) => (
+    <div style={{ minHeight: "300vh" }}>
+      <Tabs defaultValue="statistics" className="w-[1400px] h-[1000px]">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="statistics">STATISTICS</TabsTrigger>
+          <TabsTrigger value="counts">COUNTS</TabsTrigger>
+          <TabsTrigger value="save/load">SAVE/LOAD</TabsTrigger>
+        </TabsList>
+        <TabsContent value="statistics">
+          <Card>
+            <CardHeader>
+              <CardTitle>统计结果</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Table>
+                <TableCaption>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button id="two-step-bt" onClick={initData} style={{ marginLeft: 'auto' }}>点击重置数据</Button>
+                    <ToastContainer />
+                  </div>
+                </TableCaption>
+                <TableHeader>
                   <TableRow>
-                    <TableCell>{group.length > 3 ? `${group.charAt(0)}..${group.charAt(group.length - 1)}` : group}</TableCell>
-                    <TableCell>{title}</TableCell>
-                    {batches.map((batch) => (
-                      <TableCell>{genMsg(group, title, batch, 'onestep')}</TableCell>
+                    <TableHead className="w-[10px]">组名</TableHead>
+                    <TableHead className="w-[5px]">产品</TableHead>
+                    {batches.map((i) => (
+                      <TableHead key={`batch-${i}`}>{i}</TableHead>
                     ))}
-                    {batches.map((batch) => (
-                      <TableCell>{genMsg(group, title, batch, 'twostep')}</TableCell>
+                    {batches.map((i) => (
+                      <TableHead key={`batch2-${i}`}>2-{i}</TableHead>
                     ))}
                   </TableRow>
-                ))
-              ))}
-            </TableBody>
-          </Table>
-          </CardContent>
-        </Card>
-      </TabsContent>
-      <TabsContent value="save/load">
-        <Card>
-          <CardHeader>
-            <CardTitle>保存和读取</CardTitle>
-            <CardDescription>
-              点击保存可下载当前结果的json文件，点击上传将上传json文件，注意json必须是通过保存下载且未经更改的，否则会报错.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {/* <div className="space-y-1">
-              <Label htmlFor="current">Current password</Label>
-              <Input id="current" type="password" />
+                </TableHeader>
+                <TableBody>
+                  {groupNames.length > 0 && groupNames.map((group) => (
+                    gameTitles.map((title) => (
+                      <TableRow key={`${group}-${title}`}>
+                        <TableCell>{group.length > 3 ? `${group.charAt(0)}..${group.charAt(group.length - 1)}` : group}</TableCell>
+                        <TableCell>{title}</TableCell>
+                        {batches.map((batch) => (
+                          <TableCell key={`${group}-${title}-${batch}`}>{genMsg(group, title, batch, 'onestep')}</TableCell>
+                        ))}
+                        {batches.map((batch) => (
+                          <TableCell key={`${group}-${title}-${batch}-2`}>{genMsg(group, title, batch, 'twostep')}</TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="counts">
+          <Card>
+            {groupNames.length > 0 && groupNames.map((group, idx) => (
+              <div key={idx}>
+                <CardHeader>
+                  <CardTitle>{group}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <ResponsiveContainer width="100%" height={100}>
+                    <LineChart data={countData[group].onestep}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="index" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Line type="monotone" dataKey="nsample" stroke="#8884d8" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                  <ResponsiveContainer width="100%" height={100}>
+                    <LineChart data={countData[group].twostep}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="index" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Line type="monotone" dataKey="nsample" stroke="#82ca9d" />
+                      <Line type="monotone" dataKey="nsample2" stroke="#ff7300" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </div>
+            ))}
+          </Card>
+        </TabsContent>
+        <TabsContent value="save/load">
+          <Card>
+            <CardHeader>
+              <CardTitle>保存和读取</CardTitle>
+              <CardDescription>
+                点击保存可下载当前结果的json文件，点击上传将上传json文件，注意json必须是通过保存下载且未经更改的，否则会报错.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <Dropdown 
+                options={fileList}
+                value={selectedFileName}
+                onChange={handleChange}
+                label="请选择下载文件"
+              ></Dropdown>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <Button id="download-card" onClick={downloadFile} style={{ display: 'flex', alignItems: 'center' }}>
+                  <Download className="mr-2 h-4 w-4" />
+                  <span>点击下载</span>
+                </Button>
+              </div>
+              <ToastContainer/>
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="new">New password</Label>
-              <Input id="new" type="password" />
-            </div> */}
-          </CardContent>
-          {/* <CardFooter>
-            <Button>Save password</Button>
-          </CardFooter> */}
-        </Card>
-      </TabsContent>
-    </Tabs>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      <div className="flex items-center space-x-2 w-[300px] mt-4">
+        <Switch id="two-step-qc" onCheckedChange={toggleAutoRefresh} />
+        <Label htmlFor="two-step-qc">自动刷新数据视图</Label>
+      </div>
+      </Tabs>
     </div>
   )
 }
