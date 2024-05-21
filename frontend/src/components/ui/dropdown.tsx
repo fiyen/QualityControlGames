@@ -2,6 +2,7 @@
 interface Option {
     value: string;
     label: string;
+    disabled?: boolean;
 }
 
 // 使用类型注解限定参数类型
@@ -15,7 +16,11 @@ const Dropdown = ({ options, value, onChange, label = "请选择批次" }: {
         <select value={value ? value.value : ""} onChange={(e) => onChange(e.target.value)}>
             <option value="">{label}</option>
             {options.map(option => (
-                <option key={option.value} value={option.value}>
+                <option 
+                    key={option.value} 
+                    value={option.value} 
+                    disabled={option.disabled}
+                >
                     {option.label}
                 </option>
             ))}

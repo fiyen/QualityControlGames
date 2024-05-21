@@ -25,6 +25,7 @@ import { toast, ToastContainer } from 'react-toastify';
 import { getDataTemplate, DataFrame } from './initData'
 import Dropdown, { Option } from './dropdown'
 import 'react-toastify/dist/ReactToastify.css';
+import { group } from 'console';
 
 let data: DataFrame
 
@@ -54,9 +55,10 @@ const FormSchema = z.object({
   }).refine(data => data.re > data.ac, 
     {message: "Re必须大于Ac",
     path: ["re"]},
-   ).refine(data => data.nsample > data.nxpassed,
-    {message: "不合格品数不可能大于样本数",
-    path: ['nsample']})
+   )
+//    .refine(data => data.nsample > data.nxpassed,
+//     {message: "不合格品数不可能大于样本数",
+//     path: ['nsample']})
 
 const FormSchema2 = z.object({
     ac2: z.number().min(0, {
@@ -83,9 +85,10 @@ const FormSchema2 = z.object({
   }).refine(data => data.re2 > data.ac2, 
     {message: "Re必须大于Ac",
     path: ["re2"]},
-   ).refine(data => data.nsample2 > data.nxpassed2,
-    {message: "不合格品数不可能大于样本数",
-    path: ['nsample2']})
+   )
+//    .refine(data => data.nsample2 > data.nxpassed2,
+//     {message: "不合格品数不可能大于样本数",
+//     path: ['nsample2']})
 
 interface Prod {
     background: string;
@@ -120,6 +123,9 @@ const prodLabel: IconBackground = {
     "手机屏幕": "phone"
 }
 
+const plusBase = 0.1;
+const probBase = [0.9, 0.08, 0.02];
+
 function ProdPage() {
     const { markVisited } = useContext(AuthContext);
 
@@ -132,11 +138,15 @@ function ProdPage() {
     const [prods, setProds] = useState<Prod[]>([]);
     const [batchs, setBatchs] = useState<Option[]>(Array.from({ length: 20 }, (_, index) => ({
                                                             value: `${index + 1}`,
-                                                            label: `batch ${index + 1}`})));
+                                                            label: `batch ${index + 1}`,
+                                                            disabled: index > 0 // 当 index === 0 时，disabled 为 false，其余为 true
+                                                        })));
     const [selectedBatch, setSelectedBatch] = useState<Option | null>(null)
     const [switchTwoStep, setSwitched] = useState(false)
     const location = useLocation();
     const { groupName, title } = location.state || {};
+    const [probs, setProbs] = useState(JSON.parse(JSON.stringify(probBase)));
+    const [plus, setPlus] = useState(plusBase);
 
     const form = useForm<z.infer<typeof FormSchema>>({
         resolver: zodResolver(FormSchema),
@@ -185,10 +195,15 @@ function ProdPage() {
         .then(response => response.json())
         .then(result => {
             console.log("result:", result);
-            toast.info(
-                 `恭喜，"${groupName}"的第"${updateData.batch}"批的检验结果已成功保存。`,
-            )})
-        .catch(error => {
+            if (result.status_code === 200) {
+                loadData(); // 调用loadData是为了更新batchs
+                toast.info(
+                    `恭喜，"${groupName}"的第"${updateData.batch}"批的检验结果已成功保存。`,
+               )
+            } else {
+                toast.error(`很遗憾，"${groupName}"的第"${updateData.batch}"批的检验结果未能成功保存，请稍后重试。`)
+            }
+        }).catch(error => {
             console.error('Error saving data:', error);
             toast.info(
                 `很遗憾，"${groupName}"的第"${updateData.batch}"批的检验结果未能成功保存，请稍后重试。`,
@@ -221,9 +236,14 @@ function ProdPage() {
         .then(response => response.json())
         .then(result => {
             console.log("result:", result);
-            toast.info(
-                 `恭喜，"${groupName}"的第"${selectedBatch.value}"批的检验结果已成功保存。`,
-        )})
+            if (result.status_code === 200) {
+                loadData(); // 调用loadData是为了更新batchs
+                toast.info(
+                    `恭喜，"${groupName}"的第"${updateData.batch}"批的检验结果已成功保存。`,
+               )
+            } else {
+                toast.error(`很遗憾，"${groupName}"的第"${updateData.batch}"批的检验结果未能成功保存，请稍后重试。`)
+            }})
         .catch(error => {
             console.error('Error saving data:', error);
             // 可以在这里处理保存数据失败的情况
@@ -233,8 +253,47 @@ function ProdPage() {
     }
 
     function onSwitched(data: boolean) {
-        setSwitched(data)
+        setSwitched(data);
+        // 重置switchBatch，防止batch选择限制失效
+        setSelectedBatch(null);
+        setShowProd(false);
     }
+
+    function checkWarning(): boolean {
+        if (!selectedBatch || !groupName || !title || !data || !data.groups[groupName] || !data.groups[groupName][prodLabel[title]]) {
+            return true;  // 如果信息不全，直接返回true表示有警告
+        }
+    
+        const batchIndex = parseInt(selectedBatch.value);
+        
+        // 如果选中的批次号小于或等于3，那么它之前的三个批次不全，我们返回false，无需检查
+        if (batchIndex <= 3) {
+            return false;
+        }
+    
+        // 遍历选中的批次之前的三个批次
+        for (let i = 1; i <= 3; i++) {
+            const previousBatchIndex = batchIndex - i;
+            const sampleData = data.groups[groupName][prodLabel[title]].sampledata[previousBatchIndex];
+    
+            if (switchTwoStep) {
+                // 二次检验
+                const { onestep, twostep } = sampleData.twostep;
+                if (onestep.result !== "合格" && twostep.result2 !== "合格") {
+                    return true; // 如果至少有一次不合格，就返回true
+                }
+            } else {
+                // 一次检验
+                const oneStepResult = sampleData.onestep.result;
+                if (oneStepResult !== "合格") {
+                    return true; // 如果至少有一次不合格，就返回true
+                }
+            }
+        }
+    
+        return false; // 如果前三个批次都合格，返回false
+    }
+    
     
     const genProds = () => {
         if (showProd) {
@@ -243,17 +302,79 @@ function ProdPage() {
                     let quality;
                     if (parseFloat(AQL[title]) < 100) {
                         quality = Math.random();
-                        while (quality < 0.5 || Math.random() > (1 - parseFloat(AQL[title]) / 100)) {
-                            quality = Math.random();
+                        console.log("plus:", plus)
+                        console.log("plus:", (1 - parseFloat(AQL[title]) / 100 * plus))
+                        // while (quality < 0.5 || Math.random() > (1 - parseFloat(AQL[title]) / 100 * plus)) {
+                        //     quality = Math.random();
+                        // }
+                        if (Math.random() >  (1 - parseFloat(AQL[title]) / 100 * plus)) {
+                            quality = 0.5 * Math.random();
+                        } else {
+                            quality = 0.5 + 0.5 * Math.random();
                         }
                     } else {
-                        const mean = parseFloat(AQL[title]) / 100;
-                        const stdDev = 0.1; // 标准差取0.1
-                        quality = Math.round(gaussianRandom(mean, stdDev) * 100) / 100; // 生成服从高斯分布的整数值
+                        const probabilities = probs; // 设置选择0, 1, 2的概率
+                        const cumulativeProbabilities = [probabilities[0], probabilities[0] + probabilities[1], 1]; // 累积概率
+                        const rand = Math.random();
+    
+                        if (rand < cumulativeProbabilities[0]) {
+                            quality = 0;
+                        } else if (rand < cumulativeProbabilities[1]) {
+                            quality = 1;
+                        } else {
+                            quality = 2;
+                        }
                     }
                     return { background: iconBackgrd[title], quality: quality.toFixed(2).toString() };
                 })
-            )
+            );
+            // 产品质量恶化
+            if (parseFloat(AQL[title]) < 100) {
+                if (checkWarning()) {
+                    console.log("1", plus)
+                    setPlus(plusBase);
+                } else {
+                    console.log("2", plus)
+                    setPlus(plus + 0.2);
+                }
+            } else {
+                if (checkWarning()) {
+                    console.log("3", probs)
+                    setProbs(JSON.parse(JSON.stringify(probBase)));
+                } else {
+                    console.log("4", probs)
+                    probs[0] = probs[0] - 0.02;
+                    probs[1] = probs[1] + 0.015;
+                    probs[2] = probs[2] + 0.001;
+                    setProbs(probs);
+                }
+            }
+
+        }
+    } 
+
+    const innerTest = () => {
+        if (showProd) {
+            if (parseFloat(AQL[title]) < 100) {
+                let count = 0;
+                prods.forEach(product => {
+                    if (parseFloat(product.quality) > 0.5) {
+                        count++;
+                    }
+                });
+                const ratio = count / prods.length;
+                console.log("Number", count, "Quality > 0.5 ratio:", ratio);
+            } else {
+                let count = 0;
+                let q = 0;
+                prods.forEach(product => {
+                    count++;
+                    q += parseInt(product.quality)
+                });
+                const total100 = q / prods.length * 100; 
+                console.log("Number", count, "100 Quality total:", total100);
+            }
+            
         }
     }
     
@@ -277,9 +398,11 @@ function ProdPage() {
     
             // 解析 JSON 数据
             data = await response.json();
+
+            // 得到data后立马刷新batchs
+            updateBatchs();
         
             // TODO: 根据需求对data进行更多操作
-            processResponse();
         } catch (error) {
             // 错误处理
             console.error('There was a problem with your fetch operation:', error);
@@ -317,11 +440,40 @@ function ProdPage() {
             fields.forEach(field => {
                 form.setValue(field, onestep[field])
             })
-
         }
-        
-        
     }
+
+    const updateBatchs = () => {
+        if (data.groups && (groupName in data.groups)) {
+            const updatedBatchs = batchs.map(batch => {
+                const batchIndex = parseInt(batch.value);
+                if (batchIndex > 1) { // Skip the first batch
+                    if (switchTwoStep) {
+                        const {onestep, twostep} = data.groups[groupName][prodLabel[title]].sampledata[batchIndex - 1].twostep;
+                        if (onestep.result) {
+                            if (onestep.result === "合格" || onestep.result === "不合格" || (onestep.result === "二次检验" && twostep.result2)) {
+                                return { ...batch, disabled: false }
+                            } else {
+                                return { ...batch, disabled: true}
+                            }
+                        } else {
+                            return { ...batch, disabled: true}
+                        }
+                    } else {
+                        const one = data.groups[groupName][prodLabel[title]].sampledata[batchIndex - 1].onestep;
+                        if (one.result) {
+                            return { ...batch, disabled: false }
+                        } else {
+                            return { ...batch, disabled: true}
+                        }
+                    }
+                }
+                return batch; // Return unchanged batch if no conditions matched
+            });
+            setBatchs(updatedBatchs); // Update state with the new batchs array
+        }
+    }
+    
 
     const handleChange = (newValue) => {
         const newBatch = batchs.find(batch => batch.value === newValue);
@@ -340,10 +492,20 @@ function ProdPage() {
 
     // useEffect 监听 selectedBatch 的变化
     useEffect(() => {
-            if (selectedBatch) {
-                loadData(); // 调用加载数据的函数
-            }
-        }, [selectedBatch, switchTwoStep]);
+        loadData(); // 调用加载数据的函数
+        if (selectedBatch) {
+            processResponse();
+        }
+    }, [selectedBatch, switchTwoStep]);
+
+    // 使用空数组作为依赖，这意味着这个代码块只在组件 mount 时执行一次
+    // useEffect(() => {
+    //     async function fetchData() {
+    //         await loadData();
+    //         updateBatchs();
+    //     }
+    //     fetchData();
+    // }, []);
 
     return (
         <div>
@@ -514,12 +676,10 @@ function ProdPage() {
                         onChange={handleChange}
                     />
                 </div>
-                {showProd &&
-                (<div className="flex items-center space-x-2">
-                    <Switch id="two-step-qc" onCheckedChange={onSwitched}/>
+                <div className="flex items-center space-x-2">
+                    <Switch id="two-step-qc" onCheckedChange={onSwitched} defaultChecked={switchTwoStep}/>
                     <Label htmlFor="two-step-qc">启动二次检验</Label>
-                </div>)
-                }
+                </div>
             </div>
 
             {showProd && (
@@ -543,6 +703,13 @@ function ProdPage() {
                     onClick={genProds} 
                 >
                     生成样本
+                </Button>
+                <Button 
+                    type='button'  
+                    variant='outline' 
+                    onClick={innerTest} 
+                >
+                    点击测试
                 </Button>
             </div>)}
             <div className="background">

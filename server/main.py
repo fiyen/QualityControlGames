@@ -80,7 +80,7 @@ async def save_data(data: DataFrame):
     try:
         with open("./assets/results.json", "w") as file:
             json.dump(data.dict(), file)
-        return {"message": "Data saved successfully"}
+        return {"status_code": 200, "message": "Data saved successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -125,7 +125,7 @@ async def save_partial_data(data: PartDataFrame):
         with open("./assets/results.json", "w") as file:
             json.dump(existing_data, file, indent=4)
 
-        return {"message": "Data updated successfully"}
+        return {'status_code': 200, "message": "Data updated successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
