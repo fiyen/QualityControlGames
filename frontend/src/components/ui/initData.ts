@@ -50,7 +50,7 @@ interface DataIn {
     };
   
     // 使用循环填充sampledata对象
-    for (let i = 1; i <= 200; i++) {
+    for (let i = 1; i <= 20; i++) {
       game_data_example.sampledata[i] = JSON.parse(JSON.stringify(sample_data_example));
     }
   

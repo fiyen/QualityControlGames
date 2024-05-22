@@ -147,6 +147,7 @@ function ProdPage() {
     const { groupName, title } = location.state || {};
     const [probs, setProbs] = useState(JSON.parse(JSON.stringify(probBase)));
     const [plus, setPlus] = useState(plusBase);
+    const [testLabel, setTextLabel] = useState('');
 
     const form = useForm<z.infer<typeof FormSchema>>({
         resolver: zodResolver(FormSchema),
@@ -349,7 +350,7 @@ function ProdPage() {
                     setProbs(probs);
                 }
             }
-
+            setTextLabel('');
         }
     } 
 
@@ -363,6 +364,7 @@ function ProdPage() {
                     }
                 });
                 const ratio = count / prods.length;
+                setTextLabel(`合格品数：${count}, 合格率：${ratio}`)
                 console.log("Number", count, "Quality > 0.5 ratio:", ratio);
             } else {
                 let count = 0;
@@ -372,6 +374,7 @@ function ProdPage() {
                     q += parseInt(product.quality)
                 });
                 const total100 = q / prods.length * 100; 
+                setTextLabel(`不合格点数：${q}`)
                 console.log("Number", count, "100 Quality total:", total100);
             }
             
@@ -711,6 +714,7 @@ function ProdPage() {
                 >
                     点击测试
                 </Button>
+                <Label>{testLabel}</Label>
             </div>)}
             <div className="background">
                 <div className="gallery">
